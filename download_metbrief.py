@@ -1,5 +1,6 @@
 import os
 import requests
+from requests.auth import HTTPBasicAuth
 import datetime
 import shutil
 from bs4 import BeautifulSoup
@@ -7,6 +8,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 import time
+from user_details import *
 
 USER_AGENT = {'User-agent': 'Mozilla/5.0'}
 
@@ -17,23 +19,22 @@ def main():
     today = datetime.date.today().strftime('%m%d')
     if not os.path.isdir(today):
         shutil.copytree('template', today)
-        os.system(f'rm -r {today}/charts/*')
+        shutil.rmtree(f'{today}/charts')
+        os.mkdir(f'{today}/charts')
     os.chdir(f'{today}/charts')
 
     # Download DWD charts
     for chart in ['bwk_bodendruck_na_ana', 'ico_500ht_na_ana']:
         file_url = f'https://www.dwd.de/DWD/wetter/wv_spez/hobbymet/wetterkarten/{chart}.png'
-        wget_download(file_url)
-        
-    exit()
+        request_download(file_url)
 
     # Download wetter3
-    wget_download('https://wetter3.de/Animation_00_UTC/12_10.gif')
+    request_download('https://wetter3.de/Animation_00_UTC/12_10.gif')
 
     # Download flugwetter.de
     for temp_loc in ['11520', '10771']:
         file_url = f'https://flugwetter.de/fw/scripts/getchart.php?src=nb_obs_tmp_{temp_loc}_lv_999999_p_000_0000.png'
-        wget_download(file_url, user=USERNAME_DWD, passwd=PASSWORD_DWD)
+        request_download(file_url, user=USERNAME_DWD, passwd=PASSWORD_DWD)
 
     # Get cookies for session
     driver = webdriver.Firefox()
@@ -116,6 +117,16 @@ def download_kachelmann(session, url_in, loc_in, type_data):
     if os.path.isfile(link_filename):
         os.remove(link_filename)
     os.symlink(download_url.split("/")[-1], link_filename)
+
+
+def request_download(url_in, user=None, passwd=None):
+    filename = url_in.split('/')[-1]
+    s = requests.Session()
+    if not os.path.isfile(filename):
+        if user and passwd:
+            open(filename, 'wb').write((s.get(url_in, headers=USER_AGENT, auth=HTTPBasicAuth(user, passwd))).content)
+        else:
+            open(filename, 'wb').write((s.get(url_in, headers=USER_AGENT)).content)
 
 
 def wget_download(url_in, user=None, passwd=None):
