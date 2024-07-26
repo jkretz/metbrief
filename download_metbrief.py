@@ -11,30 +11,47 @@ import time
 from user_details import *
 
 USER_AGENT = {'User-agent': 'Mozilla/5.0'}
+LOC_COMP = 'tabor_24'
+
+detail_comp = {'tabor_24': {'temp_loc_all': ['11520', '10771'],
+                            'locations_sat': ['mitteleuropa', 'tschechische-republik'],
+                            'loc_topmeteo': 'cz',
+                            'locations_rad': ['tschechische-republik']}}
 
 
 def main():
 
     # Copy template to daily directory and clean-up if needed
     today = datetime.date.today().strftime('%m%d')
+    os.chdir(f'{LOC_COMP}')
     if not os.path.isdir(today):
-        shutil.copytree('template', today)
+        shutil.copytree(f'template_{LOC_COMP}', today)
         shutil.rmtree(f'{today}/charts')
         os.mkdir(f'{today}/charts')
-    os.chdir(f'{today}/charts')
+
+    # Rename presentation
+    os.chdir(f'{today}')
+    pres_template_string = f'template_{LOC_COMP}.odp'
+    pres_today_string = pres_template_string.replace('template', today)
+    os.rename(pres_template_string, pres_today_string)
+    os.chdir('charts')
 
     # Download DWD charts
+    if not os.path.isdir('gwl'):
+        os.mkdir('gwl')
     for chart in ['bwk_bodendruck_na_ana', 'ico_500ht_na_ana']:
         file_url = f'https://www.dwd.de/DWD/wetter/wv_spez/hobbymet/wetterkarten/{chart}.png'
-        request_download(file_url)
+        request_download(file_url, opath='gwl/')
 
     # Download wetter3
-    request_download('https://wetter3.de/Animation_00_UTC/12_10.gif')
+    request_download('https://wetter3.de/Animation_00_UTC/12_10.gif', opath='gwl/')
 
-    # Download flugwetter.de
-    for temp_loc in ['11520', '10771']:
+    # Download flugwetter.de, change station identifiers in loop if needed
+    if not os.path.isdir('sounding'):
+        os.mkdir('sounding')
+    for temp_loc in detail_comp[LOC_COMP]['temp_loc_all']:
         file_url = f'https://flugwetter.de/fw/scripts/getchart.php?src=nb_obs_tmp_{temp_loc}_lv_999999_p_000_0000.png'
-        request_download(file_url, user=USERNAME_DWD, passwd=PASSWORD_DWD)
+        request_download(file_url, opath='sounding/', user=USERNAME_DWD, passwd=PASSWORD_DWD)
 
     # Get cookies for session
     driver = webdriver.Firefox()
@@ -47,20 +64,20 @@ def main():
         s.cookies.set(cookie['name'], cookie['value'])
 
     # Satellite
-    locations = ['tschechische-republik', 'mitteleuropa']
-    for loc in locations:
+    for loc in detail_comp[LOC_COMP]['locations_sat']:
         url = f'https://kachelmannwetter.com/de/sat/{loc}/satellit-hd-5min.html'
         download_kachelmann(s, url, loc, 'sat')
 
     # Radar
-    loc = 'tschechische-republik'
-    url = f'https://kachelmannwetter.com/de/regenradar/{loc}'
-    download_kachelmann(s, url, loc, 'radar')
+
+    for loc in detail_comp[LOC_COMP]['locations_rad']:
+        url = f'https://kachelmannwetter.com/de/regenradar/{loc}'
+        download_kachelmann(s, url, loc, 'radar')
 
     var_topmeteo = {'pfd': 28, 'thermik': 24, 'wolken': 26, 'wind_1500': 39}
     today = datetime.datetime.now()
     today = today.replace(hour=0, minute=0, second=0, microsecond=0)
-    download_topmeteo(var_topmeteo, loc='de', day=0, today=today)
+    download_topmeteo(var_topmeteo, loc=detail_comp[LOC_COMP]['loc_topmeteo'], day=0, today=today)
 
 
 def download_topmeteo(var_dict, loc='de', day=0, today=None):
@@ -116,17 +133,18 @@ def download_kachelmann(session, url_in, loc_in, type_data):
     link_filename = f'{type_data}/{type_data}_{loc_in}_latest.png'
     if os.path.isfile(link_filename):
         os.remove(link_filename)
-    os.symlink(download_url.split("/")[-1], link_filename)
+    shutil.copyfile(f'{type_data}/{download_url.split("/")[-1]}', link_filename)
 
 
-def request_download(url_in, user=None, passwd=None):
+def request_download(url_in, opath='', user=None, passwd=None):
     filename = url_in.split('/')[-1]
     s = requests.Session()
     if not os.path.isfile(filename):
         if user and passwd:
-            open(filename, 'wb').write((s.get(url_in, headers=USER_AGENT, auth=HTTPBasicAuth(user, passwd))).content)
+            open(f'{opath}{filename}', 'wb').write((s.get(url_in, headers=USER_AGENT,
+                                                          auth=HTTPBasicAuth(user, passwd))).content)
         else:
-            open(filename, 'wb').write((s.get(url_in, headers=USER_AGENT)).content)
+            open(f'{opath}{filename}', 'wb').write((s.get(url_in, headers=USER_AGENT)).content)
 
 
 def wget_download(url_in, user=None, passwd=None):
