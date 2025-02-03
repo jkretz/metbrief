@@ -33,7 +33,8 @@ def main():
     os.chdir(f'{today}')
     pres_template_string = f'template_{LOC_COMP}.odp'
     pres_today_string = pres_template_string.replace('template', today)
-    os.rename(pres_template_string, pres_today_string)
+    if os.path.exists(pres_template_string):
+        os.rename(pres_template_string, pres_today_string)
     os.chdir('charts')
 
     # Download DWD charts
@@ -69,15 +70,18 @@ def main():
         download_kachelmann(s, url, loc, 'sat')
 
     # Radar
-
     for loc in detail_comp[LOC_COMP]['locations_rad']:
         url = f'https://kachelmannwetter.com/de/regenradar/{loc}'
         download_kachelmann(s, url, loc, 'radar')
 
+    # Topmeteo
     var_topmeteo = {'pfd': 28, 'thermik': 24, 'wolken': 26, 'wind_1500': 39}
     today = datetime.datetime.now()
     today = today.replace(hour=0, minute=0, second=0, microsecond=0)
     download_topmeteo(var_topmeteo, loc=detail_comp[LOC_COMP]['loc_topmeteo'], day=0, today=today)
+
+    os.chdir('..')
+    os.system(f'soffice --headless --convert-to pdf {pres_today_string}')
 
 
 def download_topmeteo(var_dict, loc='de', day=0, today=None):
@@ -133,7 +137,8 @@ def download_kachelmann(session, url_in, loc_in, type_data):
     link_filename = f'{type_data}/{type_data}_{loc_in}_latest.png'
     if os.path.isfile(link_filename):
         os.remove(link_filename)
-    shutil.copyfile(f'{type_data}/{download_url.split("/")[-1]}', link_filename)
+    if type_data in ['sat', 'radar']:
+        shutil.copyfile(f'{type_data}/{download_url.split("/")[-1]}', link_filename)
 
 
 def request_download(url_in, opath='', user=None, passwd=None):
