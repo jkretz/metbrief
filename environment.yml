@@ -1,0 +1,12 @@
+# conda env create -f environment.yml
+name: metbrief
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - requests
+  - selenium
+  - beautifulsoup4
+  - webdriver-manager
+  - lxml
