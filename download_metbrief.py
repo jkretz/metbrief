@@ -25,6 +25,7 @@ def main():
 
     # Check for available browsers
     browser_list = ['Firefox', 'Chrome']
+    browser_list = ['Chrome']
     driver_avail = {}
     for browser in browser_list:
         if browser == 'Chrome':
@@ -84,7 +85,7 @@ def main():
 
     # Download kachelmannwetter.com satellite images
     for loc in detail_comp[LOC_COMP]['locations_sat']:
-        url = f'https://kachelmannwetter.com/de/sat/{loc}/satellit-hd-5min.html'
+        url = f'https://kachelmannwetter.com/de/sat/{loc}/satellit-satellit-hd-10m-superhd.html'
         download_kachelmann(s, url, loc, 'sat')
 
     # Download kachelmannwetter.com radar images
@@ -275,7 +276,11 @@ def request_download(url_in, opath='', user=None, passwd=None):
     """
     # Extract filename safely
     parsed_url = urlparse(url_in)
-    filename = os.path.basename(parsed_url.path) or "downloaded_file"
+
+    if 'flugwetter' not in url_in:
+        filename = os.path.basename(parsed_url.path) or "downloaded_file"
+    else:
+        filename = url_in.split('=')[-1]
 
     # Ensure output directory exists
     if opath and not os.path.exists(opath):
