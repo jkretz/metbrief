@@ -7,7 +7,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 import datetime
-from user_details_jk import *
+from user_details import *
 from urllib.parse import urlparse
 import time
 
