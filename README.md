@@ -23,5 +23,11 @@
    
 ## Run
 
+From the `metbrief` directory, run:
 
+   ```bash
+   python metbrief.py
+   ```
+
+This should create a new directory of today's date in the `briefing` directory for the respective location.
    
