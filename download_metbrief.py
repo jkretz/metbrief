@@ -6,9 +6,6 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.firefox.service import Service as FirefoxService
-from selenium.webdriver.firefox.options import Options
-from webdriver_manager.firefox import GeckoDriverManager
 import datetime
 from user_details_jk import *
 from urllib.parse import urlparse
@@ -23,12 +20,25 @@ detail_comp = {'tabor_24': {'temp_loc_all': ['11520', '10771'],
                             'loc_topmeteo': 'cz',
                             'locations_rad': ['tschechische-republik']}}
 
-options = Options()
-options.add_argument("--headless")  # Run in headless mode (no GUI)
-driver = webdriver.Firefox(service=FirefoxService(GeckoDriverManager().install()), options=options)
-
 
 def main():
+
+    # Check for available browsers
+    browser_list = ['Firefox', 'Chrome']
+    driver_avail = {}
+    for browser in browser_list:
+        if browser == 'Chrome':
+            driver_avail[browser] = initialize_chrome_driver()
+        elif browser == 'Firefox':
+            driver_avail[browser] = initialize_firefox_driver()
+
+    if len(driver_avail) == 0:
+        raise Exception(f'Installed browsers not in {browser_list}')
+
+    driver = None
+    for key, item in driver_avail.items():
+        driver = driver_avail[key]
+        break
 
     # Copy template to daily directory and clean-up if needed
     today = datetime.date.today().strftime('%m%d')
@@ -89,7 +99,7 @@ def main():
     today = today.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Topmeteo chart download
-    download_topmeteo(var_topmeteo, loc=detail_comp[LOC_COMP]['loc_topmeteo'],
+    download_topmeteo(driver, var_topmeteo, loc=detail_comp[LOC_COMP]['loc_topmeteo'],
                       day=0, today=today, user=USERNAME_TOPMETEO, passwd=PASSWORD_TOPMETEO)
 
     # Verify if command-line LibreOffice is available
@@ -98,10 +108,38 @@ def main():
         # Convert presentation to PDF
         os.system(f'soffice --headless --convert-to pdf {pres_today_string}')
 
-    driver.close()
+    # Clean up
+    for key, item in driver_avail.items():
+        driver_avail[key].close()
 
 
-def download_topmeteo(var_dict, loc='de', day=0, today=None, user=None, passwd=None):
+def initialize_chrome_driver():
+    from selenium.webdriver.chrome.service import Service as ChromeService
+    from webdriver_manager.chrome import ChromeDriverManager
+    from selenium.webdriver.chrome.options import Options
+    driver = None
+    try:
+        options_chrome = Options()
+        options_chrome.add_argument("--headless")
+        driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options_chrome)
+    finally:
+        return driver
+
+
+def initialize_firefox_driver():
+    from selenium.webdriver.firefox.service import Service as FirefoxService
+    from webdriver_manager.firefox import GeckoDriverManager
+    from selenium.webdriver.firefox.options import Options
+    driver = None
+    try:
+        options = Options()
+        options.add_argument("--headless")
+        driver = webdriver.Firefox(service=FirefoxService(GeckoDriverManager().install()), options=options)
+    finally:
+        return driver
+
+
+def download_topmeteo(driver, var_dict, loc='de', day=0, today=None, user=None, passwd=None):
     """
     Downloads weather charts from TopMeteo by automating login and fetching images.
 
