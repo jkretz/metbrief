@@ -8,12 +8,11 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.firefox import GeckoDriverManager
 import datetime
 from user_details_jk import *
 from urllib.parse import urlparse
+import time
 
 
 USER_AGENT = {'User-agent': 'Mozilla/5.0'}
@@ -23,6 +22,10 @@ detail_comp = {'tabor_24': {'temp_loc_all': ['11520', '10771'],
                             'locations_sat': ['mitteleuropa', 'tschechische-republik'],
                             'loc_topmeteo': 'cz',
                             'locations_rad': ['tschechische-republik']}}
+
+options = Options()
+options.add_argument("--headless")  # Run in headless mode (no GUI)
+driver = webdriver.Firefox(service=FirefoxService(GeckoDriverManager().install()), options=options)
 
 
 def main():
@@ -61,12 +64,8 @@ def main():
         request_download(file_url, opath='sounding/', user=USERNAME_DWD, passwd=PASSWORD_DWD)
 
     # Get cookies for session to download images from kachelmannwetter.com
-    options = Options()
-    options.add_argument("--headless=new") # Run in headless mode (no GUI)
-    driver = webdriver.Firefox(service=FirefoxService(GeckoDriverManager().install()), options=options)
     driver.get('https://kachelmannwetter.com/')
     cookies = driver.get_cookies()
-    driver.close()
 
     # Set cookie that has previously been fetched
     s = requests.Session()
@@ -88,15 +87,18 @@ def main():
     # Set date
     today = datetime.datetime.now()
     today = today.replace(hour=0, minute=0, second=0, microsecond=0)
+
     # Topmeteo chart download
     download_topmeteo(var_topmeteo, loc=detail_comp[LOC_COMP]['loc_topmeteo'],
-                        day=0, today=today, user=USERNAME_TOPMETEO, passwd=PASSWORD_TOPMETEO)
+                      day=0, today=today, user=USERNAME_TOPMETEO, passwd=PASSWORD_TOPMETEO)
 
     # Verify if command-line LibreOffice is available
     os.chdir('..')
     if shutil.which('soffice'):
         # Convert presentation to PDF
         os.system(f'soffice --headless --convert-to pdf {pres_today_string}')
+
+    driver.close()
 
 
 def download_topmeteo(var_dict, loc='de', day=0, today=None, user=None, passwd=None):
@@ -108,6 +110,8 @@ def download_topmeteo(var_dict, loc='de', day=0, today=None, user=None, passwd=N
     - loc (str, optional): Location code (default: 'de').
     - day (int, optional): Forecast day (0 = today, 1 = tomorrow, etc.).
     - today (datetime, optional): Reference datetime object for time calculation.
+    - user (str, optional): Username for authentication (default: None).
+    - passwd (str, optional): Password for authentication (default: None).
 
     Notes:
     - Creates a 'topmeteo' directory if it doesn't exist.
@@ -115,83 +119,41 @@ def download_topmeteo(var_dict, loc='de', day=0, today=None, user=None, passwd=N
     - Downloads images for specified weather parameters.
     """
 
-    # Ensure 'topmeteo' directory exists
-    os.makedirs("topmeteo", exist_ok=True)
+    # Create topmeteo directory in charts
+    if not os.path.isdir('topmeteo'):
+        os.mkdir('topmeteo')
 
-    if not user or not passwd:
-        print("Error: TopMeteo credentials not set in environment variables.")
-        return
+    # Login
+    driver.get('https://vfr.topmeteo.eu/de/')
+    driver.find_element(By.NAME, "username").send_keys(user)
+    driver.find_element(By.NAME, "password").send_keys(passwd)
+    driver.find_element(By.NAME, "password").send_keys(Keys.ENTER)
+    time.sleep(3)
 
-    # Configure Selenium WebDriver
-    options = Options()
-    options.add_argument("--headless=new") # Run in headless mode (no GUI)
-    driver = webdriver.Firefox(service=FirefoxService(GeckoDriverManager().install()), options=options)
+    for key, var in var_dict.items():
+        if key == 'pfd':
+            time_steps = [0]
+        else:
+            time_steps = range(8, 17)
 
-    try:
-        # Open login page
-        driver.get("https://vfr.topmeteo.eu/de/")
+        var_path = f'topmeteo/{key}'
+        if not os.path.isdir(var_path):
+            os.mkdir(var_path)
 
-        # Wait until the username field is present
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, "username")))
-
-        # Enter credentials and login
-        driver.find_element(By.NAME, "username").send_keys(user)
-        driver.find_element(By.NAME, "password").send_keys(passwd)
-        driver.find_element(By.NAME, "password").send_keys(Keys.ENTER)
-
-        # Wait for login to complete
-        WebDriverWait(driver, 10).until(EC.url_contains("vfr.topmeteo.eu"))
-
-        # Get cookies after login
-        cookies = driver.get_cookies()
-
-        # Start a session and set cookies
-        session = requests.Session()
-        for cookie in cookies:
-            session.cookies.set(cookie["name"], cookie["value"])
-
-        # Download images
-        for key, var in var_dict.items():
-            time_steps = [0] if key == "pfd" else range(8, 17)
-
-            var_path = f"topmeteo/{key}"
-            os.makedirs(var_path, exist_ok=True)
-
-            for time_data in time_steps:
-                filename = f"{key}_{day}_{time_data}.png"
-                file_path = os.path.join(var_path, filename)
-
-                # Skip if file already exists
-                if os.path.isfile(file_path):
-                    continue
-
-                # Construct the timestamp
-                if today is None:
-                    today = datetime.utcnow()
+        for time_data in time_steps:
+            filename = f'{key}_{day}_{time_data}.png'
+            if os.path.isfile(f'{var_path}/{filename}'):
+                continue
+            else:
                 time_step = today.replace(hour=time_data).strftime("%Y-%m-%dT%H:%M:%SZ")
+                download_url = f'https://vfr.topmeteo.eu/de/{loc}/map/{var}/{day}/{time_data}/image?{time_step}'
+                driver.get(download_url)
+                cookies = driver.get_cookies()
+                s = requests.Session()
+                for cookie in cookies:
+                    s.cookies.set(cookie['name'], cookie['value'])
+                open(f'{var_path}/{filename}', 'wb').write((s.get(download_url, headers=USER_AGENT)).content)
 
-                # Construct the download URL
-                download_url = f"https://vfr.topmeteo.eu/de/{loc}/map/{var}/{day}/{time_data}/image?{time_step}"
-
-                try:
-                    # Request image
-                    response = session.get(download_url, headers=USER_AGENT, stream=True)
-                    response.raise_for_status()  # Raise an error if request failed
-
-                    # Save the image
-                    with open(file_path, "wb") as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            f.write(chunk)
-
-                except requests.exceptions.RequestException as e:
-                    print(f"Error downloading {filename}: {e}")
-
-    except Exception as e:
-        print(f"Error during Selenium login: {e}")
-
-    finally:
-        # Close the Selenium driver
-        driver.quit()
 
 def download_kachelmann(session, url_in, loc_in, type_data):
     """

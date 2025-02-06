@@ -5,24 +5,21 @@
 
 2. Install Miniconda or Anaconda (if not already done). Follow the [respective instructions](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html#regular-installation) for your operating system.
 
-3. Open a Terminal / Anaconda Prompt (under Windows)
+3. Download a zipped version of the repository (Click on Code and you will find a button to download it) and unzip it. 
 
-4. If not already installed, a version of git is needed to clone repository of the checker from GitHub. It can be installed using conda:
+4. Alternatively, it also can be downloaded via git.
     ```bash
-   conda install -c anaconda git
-    ```
-5. Clone this repository:
-
-   ```bash
    git clone https://github.com/jkretz/metbrief.git
-   cd atmodat_data_checker
-   ```
+    ```
+5. Open a Terminal / Anaconda Prompt (under Windows) and navigate to the (unziped) directory of the repository.
 
 6. Create the conda environment and install the needed anaconda packages:
    ```bash
    conda env create -f environment.yml
    conda activate metbrief
    ```
+   
+7. Enter your flugwetter.de and TopMeteo user detail in `user_details.py`.
    
 ## Run
 
