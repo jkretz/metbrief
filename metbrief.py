@@ -13,9 +13,9 @@ import time
 import base64
 
 
-LOC_COMP = 'tabor_24'
+LOC_COMP = 'tabor_25'
 
-detail_comp = {'tabor_24': {'temp_loc_all': ['11520', '10771'],
+detail_comp = {'tabor_25': {'temp_loc_all': ['11520', '10771'],
                             'locations_sat': ['mitteleuropa', 'tschechische-republik'],
                             'loc_topmeteo': 'cz',
                             'locations_rad': ['tschechische-republik']}}
