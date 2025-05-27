@@ -10,9 +10,9 @@ import datetime
 from user_details import *
 from urllib.parse import urlparse
 import time
+import base64
 
 
-USER_AGENT = {'User-agent': 'Mozilla/5.0'}
 LOC_COMP = 'tabor_24'
 
 detail_comp = {'tabor_24': {'temp_loc_all': ['11520', '10771'],
@@ -25,7 +25,6 @@ def main():
 
     # Check for available browsers
     browser_list = ['Firefox', 'Chrome']
-    browser_list = ['Chrome']
     driver_avail = {}
     for browser in browser_list:
         if browser == 'Chrome':
@@ -39,7 +38,9 @@ def main():
     driver = None
     for key, item in driver_avail.items():
         driver = driver_avail[key]
-        break
+        #break
+
+    user_agent = {'User-agent': driver.execute_script("return navigator.userAgent")}
 
     # Copy template to daily directory and clean-up if needed
     today = datetime.date.today().strftime('%m%d')
@@ -62,17 +63,17 @@ def main():
         os.mkdir('gwl')
     for chart in ['bwk_bodendruck_na_ana', 'ico_500ht_na_ana']:
         file_url = f'https://www.dwd.de/DWD/wetter/wv_spez/hobbymet/wetterkarten/{chart}.png'
-        request_download(file_url, opath='gwl/')
+        request_download(file_url, user_agent, opath='gwl/')
 
     # Download wetter3
-    request_download('https://wetter3.de/Animation_00_UTC/12_10.gif', opath='gwl/')
+    request_download('https://wetter3.de/Animation_00_UTC/12_10.gif', user_agent, opath='gwl/')
 
     # Download flugwetter.de, change station identifiers in loop if needed
     if not os.path.isdir('sounding'):
         os.mkdir('sounding')
     for temp_loc in detail_comp[LOC_COMP]['temp_loc_all']:
         file_url = f'https://flugwetter.de/fw/scripts/getchart.php?src=nb_obs_tmp_{temp_loc}_lv_999999_p_000_0000.png'
-        request_download(file_url, opath='sounding/', user=USERNAME_DWD, passwd=PASSWORD_DWD)
+        request_download(file_url, user_agent, opath='sounding/', user=USERNAME_DWD, passwd=PASSWORD_DWD)
 
     # Get cookies for session to download images from kachelmannwetter.com
     driver.get('https://kachelmannwetter.com/')
@@ -86,12 +87,12 @@ def main():
     # Download kachelmannwetter.com satellite images
     for loc in detail_comp[LOC_COMP]['locations_sat']:
         url = f'https://kachelmannwetter.com/de/sat/{loc}/satellit-satellit-hd-10m-superhd.html'
-        download_kachelmann(s, url, loc, 'sat')
+        download_kachelmann(s, url, loc, 'sat', user_agent)
 
     # Download kachelmannwetter.com radar images
     for loc in detail_comp[LOC_COMP]['locations_rad']:
         url = f'https://kachelmannwetter.com/de/regenradar/{loc}'
-        download_kachelmann(s, url, loc, 'radar')
+        download_kachelmann(s, url, loc, 'radar', user_agent)
 
     # Set variables that should be downloaded from topmeteo
     var_topmeteo = {'pfd': 28, 'thermik': 24, 'wolken': 26, 'wind_1500': 39}
@@ -100,7 +101,7 @@ def main():
     today = today.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Topmeteo chart download
-    download_topmeteo(driver, var_topmeteo, loc=detail_comp[LOC_COMP]['loc_topmeteo'],
+    download_topmeteo(driver, var_topmeteo, user_agent, loc=detail_comp[LOC_COMP]['loc_topmeteo'],
                       day=0, today=today, user=USERNAME_TOPMETEO, passwd=PASSWORD_TOPMETEO)
 
     # Verify if command-line LibreOffice is available
@@ -140,7 +141,7 @@ def initialize_firefox_driver():
         return driver
 
 
-def download_topmeteo(driver, var_dict, loc='de', day=0, today=None, user=None, passwd=None):
+def download_topmeteo(driver, var_dict, user_agent, loc='de', day=0, today=None, user=None, passwd=None):
     """
     Downloads weather charts from TopMeteo by automating login and fetching images.
 
@@ -191,10 +192,10 @@ def download_topmeteo(driver, var_dict, loc='de', day=0, today=None, user=None, 
                 s = requests.Session()
                 for cookie in cookies:
                     s.cookies.set(cookie['name'], cookie['value'])
-                open(f'{var_path}/{filename}', 'wb').write((s.get(download_url, headers=USER_AGENT)).content)
+                open(f'{var_path}/{filename}', 'wb').write((s.get(download_url, headers=user_agent)).content)
 
 
-def download_kachelmann(session, url_in, loc_in, type_data):
+def download_kachelmann(session, url_in, loc_in, type_data, user_agent):
     """
     Downloads the latest satellite or radar image from Kachelmannwetter.
 
@@ -217,7 +218,7 @@ def download_kachelmann(session, url_in, loc_in, type_data):
 
     try:
         # Fetch webpage content using the provided session
-        response = session.get(url_in, headers=USER_AGENT)
+        response = session.get(url_in, headers=user_agent)
         response.raise_for_status()
 
         # Parse HTML to find the image URL
@@ -233,7 +234,7 @@ def download_kachelmann(session, url_in, loc_in, type_data):
 
         # Download image if it doesn't exist
         if not os.path.isfile(filename):
-            img_response = session.get(download_url, headers=USER_AGENT, stream=True)
+            img_response = session.get(download_url, headers=user_agent, stream=True)
             img_response.raise_for_status()  # Ensure we got a successful response
 
             with open(filename, 'wb') as file:
@@ -256,7 +257,7 @@ def download_kachelmann(session, url_in, loc_in, type_data):
         return None
 
 
-def request_download(url_in, opath='', user=None, passwd=None):
+def request_download(url_in, user_agent, opath='', user=None, passwd=None):
     """
     Downloads a file using Python's requests module with optional authentication.
 
@@ -297,7 +298,7 @@ def request_download(url_in, opath='', user=None, passwd=None):
     auth = HTTPBasicAuth(user, passwd) if user and passwd else None
 
     try:
-        response = session.get(url_in, headers=USER_AGENT, auth=auth, stream=True)
+        response = session.get(url_in, headers=user_agent, auth=auth, stream=True)
         response.raise_for_status()  # Raise an error for HTTP issues
 
         # Write content to file
