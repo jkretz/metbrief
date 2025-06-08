@@ -114,7 +114,7 @@ def main():
     for key, item in driver_avail.items():
         driver_avail[key].close()
 
-
+# Initialize Chrome driver with specific options (https://github.com/SeleniumHQ/selenium/issues/13095 means there is a bug in ChromeDriver that prevents it from running in detached mode)
 def initialize_chrome_driver():
     from selenium.webdriver.chrome.service import Service as ChromeService
     from webdriver_manager.chrome import ChromeDriverManager
