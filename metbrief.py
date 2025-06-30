@@ -10,15 +10,14 @@ import datetime
 from user_details import *
 from urllib.parse import urlparse
 import time
-import base64
 
 
-LOC_COMP = 'tabor_25'
+LOC_COMP = 'prievidza_25'
 
-detail_comp = {'tabor_25': {'temp_loc_all': ['11520', '10771'],
-                            'locations_sat': ['mitteleuropa', 'tschechische-republik'],
-                            'loc_topmeteo': 'cz',
-                            'locations_rad': ['tschechische-republik']}}
+detail_comp = {'prievidza_25': {'sounding_dict': {'11952': '961', '12575': '961', '11747': '961', '12843': '961'},
+                                'locations_sat': ['mitteleuropa', 'slowakei'],
+                                'loc_topmeteo': 'cz',
+                                'locations_rad': ['slowakei']}}
 
 
 def main():
@@ -38,7 +37,6 @@ def main():
     driver = None
     for key, item in driver_avail.items():
         driver = driver_avail[key]
-        #break
 
     user_agent = {'User-agent': driver.execute_script("return navigator.userAgent")}
 
@@ -68,13 +66,6 @@ def main():
     # Download wetter3
     request_download('https://wetter3.de/Animation_00_UTC/12_10.gif', user_agent, opath='gwl/')
 
-    # Download flugwetter.de, change station identifiers in loop if needed
-    if not os.path.isdir('sounding'):
-        os.mkdir('sounding')
-    for temp_loc in detail_comp[LOC_COMP]['temp_loc_all']:
-        file_url = f'https://flugwetter.de/fw/scripts/getchart.php?src=nb_obs_tmp_{temp_loc}_lv_999999_p_000_0000.png'
-        request_download(file_url, user_agent, opath='sounding/', user=USERNAME_DWD, passwd=PASSWORD_DWD)
-
     # Get cookies for session to download images from kachelmannwetter.com
     driver.get('https://kachelmannwetter.com/')
     cookies = driver.get_cookies()
@@ -83,6 +74,13 @@ def main():
     s = requests.Session()
     for cookie in cookies:
         s.cookies.set(cookie['name'], cookie['value'])
+
+    # Download kachelmannwetter.com soundings images
+    today_sounding = datetime.date.today().strftime('%Y%m%d')
+    for station, area_id_sounding in detail_comp[LOC_COMP]['sounding_dict'].items():
+        url = (f'https://kachelmannwetter.com/de/ajax/obsdetail?station_id=R{station}&timestamp={today_sounding}0000'
+               f'&param_id=1&model=obsradio&area_id={area_id_sounding}&counter=true&lang=DE')
+        download_kachelmann(s, url, None, 'sounding', user_agent)
 
     # Download kachelmannwetter.com satellite images
     for loc in detail_comp[LOC_COMP]['locations_sat']:
@@ -114,7 +112,9 @@ def main():
     for key, item in driver_avail.items():
         driver_avail[key].close()
 
-# Initialize Chrome driver with specific options (https://github.com/SeleniumHQ/selenium/issues/13095 means there is a bug in ChromeDriver that prevents it from running in detached mode)
+
+# Initialize Chrome driver with specific options (https://github.com/SeleniumHQ/selenium/issues/13095 means
+# there is a bug in ChromeDriver that prevents it from running in detached mode)
 def initialize_chrome_driver():
     from selenium.webdriver.chrome.service import Service as ChromeService
     from webdriver_manager.chrome import ChromeDriverManager
@@ -203,7 +203,7 @@ def download_kachelmann(session, url_in, loc_in, type_data, user_agent):
     - session (requests.Session): An active session to reuse cookies and headers.
     - url_in (str): The webpage URL containing the image.
     - loc_in (str): Location identifier for the saved file.
-    - type_data (str): Type of data to download ('sat' or 'radar').
+    - type_data (str): Type of data to download ('sat', 'radar', 'sounding').
 
     Returns:
     - str: The filename of the downloaded image if successful, None otherwise.
@@ -220,17 +220,33 @@ def download_kachelmann(session, url_in, loc_in, type_data, user_agent):
         # Fetch webpage content using the provided session
         response = session.get(url_in, headers=user_agent)
         response.raise_for_status()
+        soup = BeautifulSoup(response.text, "lxml")
 
         # Parse HTML to find the image URL
-        soup = BeautifulSoup(response.text, "lxml")
-        meta_tag = soup.find('meta', property='og:image')
+        download_url, filename = None, None
+        if type_data in ['sat', 'radar']:
+            meta_tag = soup.find('meta', property='og:image')
 
-        if not meta_tag or 'content' not in meta_tag.attrs:
-            print("Error: Image URL not found in meta tag.")
-            return None
+            if not meta_tag or 'content' not in meta_tag.attrs:
+                print("Error: Image URL not found in meta tag.")
+                return None
 
-        download_url = meta_tag['content']
-        filename = os.path.join(type_data, os.path.basename(download_url))
+            download_url = meta_tag['content']
+            filename = os.path.join(type_data, os.path.basename(download_url))
+        elif type_data == 'sounding':
+
+            for img in soup.find_all('img'):
+                for attr in ['data-src']:
+                    url = img.get(attr)
+                    if url and url.lower().endswith('.png'):
+                        download_url = url
+                    else:
+                        print("Error: Image URL not found")
+                        return None
+
+            # Split on underscores and remove the last part before .png and rejoin all except the last part before .png
+            filename_split = os.path.basename(download_url).split('_')
+            filename = os.path.join(type_data, '_'.join(filename_split[:-1]) + '.png')
 
         # Download image if it doesn't exist
         if not os.path.isfile(filename):
