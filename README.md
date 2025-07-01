@@ -19,7 +19,7 @@
    conda activate metbrief
    ```
    
-7. Enter your flugwetter.de and TopMeteo user detail in `user_details.py`.
+7. Enter your TopMeteo user detail in `user_details.py`.
    
 ## Run
 
