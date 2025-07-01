@@ -14,10 +14,20 @@ import time
 
 LOC_COMP = 'prievidza_25'
 
-detail_comp = {'prievidza_25': {'sounding_dict': {'11952': '961', '12575': '961', '11747': '961', '12843': '961'},
-                                'locations_sat': ['mitteleuropa', 'slowakei'],
-                                'loc_topmeteo': 'cz',
-                                'locations_rad': ['slowakei']}}
+detail_comp = {'prievidza_25':
+                    {'sounding_dict': {'11952': '961', '12575': '961', '11747': '961', '12843': '961'},
+                     'locations_sat': ['mitteleuropa', 'slowakei'],
+                     'loc_topmeteo': 'cz',
+                     'locations_rad': ['slowakei'],
+                     'model_info':
+                         {'model_list': ['deu-hd', 'euro', 'swisshd-nowcast'],
+                          'var_model_list':
+                              ['bewoelkungsgrad', 'bedeckungsgrad-low-clouds', 'bedeckungsgrad-mid-clouds'],
+                          'loc_model': 'slowakei', 'init_hour': '00',
+                          'today_model': datetime.date.today().strftime('%Y%m%d'),
+                          'hour_model_list': [str(i).zfill(2) for i in range(8, 18, 2)],
+                          }},
+               }
 
 
 def main():
@@ -63,9 +73,6 @@ def main():
         file_url = f'https://www.dwd.de/DWD/wetter/wv_spez/hobbymet/wetterkarten/{chart}.png'
         request_download(file_url, user_agent, opath='gwl/')
 
-    # Download wetter3
-    request_download('https://wetter3.de/Animation_00_UTC/12_10.gif', user_agent, opath='gwl/')
-
     # Get cookies for session to download images from kachelmannwetter.com
     driver.get('https://kachelmannwetter.com/')
     cookies = driver.get_cookies()
@@ -75,22 +82,32 @@ def main():
     for cookie in cookies:
         s.cookies.set(cookie['name'], cookie['value'])
 
+    model_info = detail_comp[LOC_COMP]['model_info']
+    for model_use in model_info['model_list']:
+        for var_model in model_info['var_model_list']:
+            for hour_model in model_info['hour_model_list']:
+                url = (f'https://kachelmannwetter.com/de/modellkarten/{model_use}/'
+                       f'{model_info["today_model"]}{model_info["init_hour"]}/{model_info["loc_model"]}/'
+                       f'{var_model}/{model_info["today_model"]}-{hour_model}00z.html')
+                download_kachelmann(s, url, user_agent, type_data='model', loc_in=None,
+                                    model=model_use, model_var=var_model)
+
     # Download kachelmannwetter.com soundings images
     today_sounding = datetime.date.today().strftime('%Y%m%d')
     for station, area_id_sounding in detail_comp[LOC_COMP]['sounding_dict'].items():
         url = (f'https://kachelmannwetter.com/de/ajax/obsdetail?station_id=R{station}&timestamp={today_sounding}0000'
                f'&param_id=1&model=obsradio&area_id={area_id_sounding}&counter=true&lang=DE')
-        download_kachelmann(s, url, None, 'sounding', user_agent)
+        download_kachelmann(s, url, user_agent, 'sounding')
 
     # Download kachelmannwetter.com satellite images
     for loc in detail_comp[LOC_COMP]['locations_sat']:
         url = f'https://kachelmannwetter.com/de/sat/{loc}/satellit-satellit-hd-10m-superhd.html'
-        download_kachelmann(s, url, loc, 'sat', user_agent)
+        download_kachelmann(s, url, user_agent, type_data='sat', loc_in=loc, )
 
     # Download kachelmannwetter.com radar images
     for loc in detail_comp[LOC_COMP]['locations_rad']:
         url = f'https://kachelmannwetter.com/de/regenradar/{loc}'
-        download_kachelmann(s, url, loc, 'radar', user_agent)
+        download_kachelmann(s, url, user_agent, type_data='radar', loc_in=loc)
 
     # Set variables that should be downloaded from topmeteo
     var_topmeteo = {'pfd': 28, 'thermik': 24, 'wolken': 26, 'wind_1500': 39}
@@ -101,6 +118,9 @@ def main():
     # Topmeteo chart download
     download_topmeteo(driver, var_topmeteo, user_agent, loc=detail_comp[LOC_COMP]['loc_topmeteo'],
                       day=0, today=today, user=USERNAME_TOPMETEO, passwd=PASSWORD_TOPMETEO)
+
+    # Download wetter3
+    request_download('https://wetter3.de/Animation_00_UTC/12_10.gif', user_agent, opath='gwl/')
 
     # Verify if command-line LibreOffice is available
     os.chdir('..')
@@ -195,7 +215,7 @@ def download_topmeteo(driver, var_dict, user_agent, loc='de', day=0, today=None,
                 open(f'{var_path}/{filename}', 'wb').write((s.get(download_url, headers=user_agent)).content)
 
 
-def download_kachelmann(session, url_in, loc_in, type_data, user_agent):
+def download_kachelmann(session, url_in, user_agent, type_data=None, loc_in=None, model=None, model_var=None):
     """
     Downloads the latest satellite or radar image from Kachelmannwetter.
 
@@ -214,7 +234,11 @@ def download_kachelmann(session, url_in, loc_in, type_data, user_agent):
     """
 
     # Ensure output directory exists
-    os.makedirs(type_data, exist_ok=True)
+    if model:
+        opath = os.path.join(type_data, model, model_var)
+    else:
+        opath = type_data
+    os.makedirs(opath, exist_ok=True)
 
     try:
         # Fetch webpage content using the provided session
@@ -224,17 +248,16 @@ def download_kachelmann(session, url_in, loc_in, type_data, user_agent):
 
         # Parse HTML to find the image URL
         download_url, filename = None, None
-        if type_data in ['sat', 'radar']:
-            meta_tag = soup.find('meta', property='og:image')
 
+        if type_data in ['sat', 'radar', 'model']:
+            meta_tag = soup.find('meta', property='og:image')
             if not meta_tag or 'content' not in meta_tag.attrs:
                 print("Error: Image URL not found in meta tag.")
                 return None
-
             download_url = meta_tag['content']
-            filename = os.path.join(type_data, os.path.basename(download_url))
-        elif type_data == 'sounding':
+            filename = os.path.join(opath, os.path.basename(download_url))
 
+        elif type_data == 'sounding':
             for img in soup.find_all('img'):
                 for attr in ['data-src']:
                     url = img.get(attr)
@@ -246,7 +269,7 @@ def download_kachelmann(session, url_in, loc_in, type_data, user_agent):
 
             # Split on underscores and remove the last part before .png and rejoin all except the last part before .png
             filename_split = os.path.basename(download_url).split('_')
-            filename = os.path.join(type_data, '_'.join(filename_split[:-1]) + '.png')
+            filename = os.path.join(opath, '_'.join(filename_split[:-2]) + '.png')
 
         # Download image if it doesn't exist
         if not os.path.isfile(filename):
