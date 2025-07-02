@@ -217,20 +217,19 @@ def download_topmeteo(driver, var_dict, user_agent, loc='de', day=0, today=None,
 
 def download_kachelmann(session, url_in, user_agent, type_data=None, loc_in=None, model=None, model_var=None):
     """
-    Downloads the latest satellite or radar image from Kachelmannwetter.
+    Downloads the latest satellite, radar, model, or sounding images from Kachelmannwetter.
 
     Parameters:
-    - session (requests.Session): An active session to reuse cookies and headers.
-    - url_in (str): The webpage URL containing the image.
-    - loc_in (str): Location identifier for the saved file.
-    - type_data (str): Type of data to download ('sat', 'radar', 'sounding').
+    - session (requests.Session): Active session with shared cookies and headers.
+    - url_in (str): The URL of the webpage containing the image.
+    - user_agent (dict): Headers to use in HTTP requests, e.g., {'User-Agent': '...'}.
+    - type_data (str): Type of data ('sat', 'radar', 'model', 'sounding').
+    - loc_in (str): Location identifier
+    - model (str, optional): Model name for structured output (used with 'model' type).
+    - model_var (str, optional): Model variable for structured output (used with 'model' type).
 
     Returns:
-    - str: The filename of the downloaded image if successful, None otherwise.
-
-    Notes:
-    - Saves the downloaded image in the `type_data` folder.
-    - Creates a symbolic link for easy access to the latest image.
+    - str: The full path of the downloaded image file, or None if download failed.
     """
 
     # Ensure output directory exists
@@ -255,7 +254,12 @@ def download_kachelmann(session, url_in, user_agent, type_data=None, loc_in=None
                 print("Error: Image URL not found in meta tag.")
                 return None
             download_url = meta_tag['content']
-            filename = os.path.join(opath, os.path.basename(download_url))
+            if type_data == 'model':
+                filename_split = os.path.basename(download_url).split('_')
+                filename_split.pop(3)
+                filename = os.path.join(opath, '_'.join(filename_split))
+            else:
+                filename = os.path.join(opath, os.path.basename(download_url))
 
         elif type_data == 'sounding':
             for img in soup.find_all('img'):
