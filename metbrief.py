@@ -44,9 +44,23 @@ def main():
     if len(driver_avail) == 0:
         raise Exception(f'Installed browsers not in {browser_list}')
 
-    driver = None
-    for key, item in driver_avail.items():
-        driver = driver_avail[key]
+    nd = 0
+    driver, cookies = None, None
+
+    for key, driver in driver_avail.items():
+        # Try to get cookies for session
+        driver.get('https://kachelmannwetter.com/')
+        cookies = driver.get_cookies()
+
+        if len(cookies) == 0:
+            print(f'Cookies not found for {key}')
+            nd += 1
+            if nd == len(driver_avail):
+                raise Exception(f'Cookie download failed for all drivers in: {list(driver_avail.keys())}')
+            continue  # Try the next driver
+        else:
+            print(f'Cookies successfully retrieved using driver: {key}')
+            break  # Exit loop if cookies are successfully retrieved
 
     user_agent = {'User-agent': driver.execute_script("return navigator.userAgent")}
 
@@ -72,10 +86,6 @@ def main():
     for chart in ['bwk_bodendruck_na_ana', 'ico_500ht_na_ana']:
         file_url = f'https://www.dwd.de/DWD/wetter/wv_spez/hobbymet/wetterkarten/{chart}.png'
         request_download(file_url, user_agent, opath='gwl/')
-
-    # Get cookies for session to download images from kachelmannwetter.com
-    driver.get('https://kachelmannwetter.com/')
-    cookies = driver.get_cookies()
 
     # Set cookie that has previously been fetched
     s = requests.Session()
