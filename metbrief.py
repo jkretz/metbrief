@@ -59,10 +59,13 @@ def main():
                         help="Set to True to only download satellite and radar charts")
     parser.add_argument("--create_presentation_locally", required=False, type=bool, default=False,
                         help="Set to True to create the presentation locally. PRESENTLY DISABLED")
+    parser.add_argument("--output_path", required=False, type=str,
+                        help="Set output path")
     args = parser.parse_args()
 
     satrad_only = args.satrad_only
     create_presentation_locally = False  # args.create_presentation_locally
+    output_path = args.output_path
 
     # Check for available browsers
     browser_list = ['Firefox', 'Chrome']
@@ -113,8 +116,13 @@ def main():
             os.rename(pres_template_string, pres_today_string)
         os.chdir('charts')
     else:
-        os.makedirs(f'briefings/{LOC_COMP}/charts', exist_ok=True)
-        os.chdir(f'briefings/{LOC_COMP}/charts')
+        if output_path:
+            base_path = os.path.join(output_path, 'meteo', 'charts')
+        else:
+            base_path = os.path.join('briefings', f'{LOC_COMP}', 'charts')
+
+        os.makedirs(base_path, exist_ok=True)
+        os.chdir(base_path)
 
     # Set cookie that has previously been fetched
     s = requests.Session()
