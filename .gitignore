@@ -3,3 +3,4 @@ __pycache__*
 user_details.py
 *~
 *.log
+*/.DS_Store

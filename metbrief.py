@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 import time
 
 
-LOC_COMP = 'prievidza_25'
+LOC_COMP = 'tabor_25'
 
 detail_comp = {'prievidza_25':
                     {'sounding_dict': {'11952': '961', '12575': '961', '11747': '961', '12843': '961'},
@@ -27,6 +27,12 @@ detail_comp = {'prievidza_25':
                           'today_model': datetime.date.today().strftime('%Y%m%d'),
                           'hour_model_list': [str(i).zfill(2) for i in range(8, 18, 2)],
                           }},
+
+
+                'tabor_25': {'sounding_dict': {'10771': '942', '11520': '942', '11747': '942'},
+                                            'locations_sat': ['mitteleuropa', 'tschechische-republik'],
+                                            'loc_topmeteo': 'cz',
+                                            'locations_rad': ['tschechische-republik']},
                }
 
 
@@ -92,32 +98,38 @@ def main():
     for cookie in cookies:
         s.cookies.set(cookie['name'], cookie['value'])
 
-    model_info = detail_comp[LOC_COMP]['model_info']
-    for model_use in model_info['model_list']:
-        for var_model in model_info['var_model_list']:
-            for hour_model in model_info['hour_model_list']:
-                url = (f'https://kachelmannwetter.com/de/modellkarten/{model_use}/'
-                       f'{model_info["today_model"]}{model_info["init_hour"]}/{model_info["loc_model"]}/'
-                       f'{var_model}/{model_info["today_model"]}-{hour_model}00z.html')
-                download_kachelmann(s, url, user_agent, type_data='model', loc_in=None,
-                                    model=model_use, model_var=var_model)
+    keys_charts = detail_comp[LOC_COMP].keys()
+
+    if 'model_info' in keys_charts:
+        model_info = detail_comp[LOC_COMP]['model_info']
+        for model_use in model_info['model_list']:
+            for var_model in model_info['var_model_list']:
+                for hour_model in model_info['hour_model_list']:
+                    url = (f'https://kachelmannwetter.com/de/modellkarten/{model_use}/'
+                           f'{model_info["today_model"]}{model_info["init_hour"]}/{model_info["loc_model"]}/'
+                           f'{var_model}/{model_info["today_model"]}-{hour_model}00z.html')
+                    download_kachelmann(s, url, user_agent, type_data='model', loc_in=None,
+                                        model=model_use, model_var=var_model)
 
     # Download kachelmannwetter.com soundings images
-    today_sounding = datetime.date.today().strftime('%Y%m%d')
-    for station, area_id_sounding in detail_comp[LOC_COMP]['sounding_dict'].items():
-        url = (f'https://kachelmannwetter.com/de/ajax/obsdetail?station_id=R{station}&timestamp={today_sounding}0000'
-               f'&param_id=1&model=obsradio&area_id={area_id_sounding}&counter=true&lang=DE')
-        download_kachelmann(s, url, user_agent, 'sounding')
+    if 'sounding_dict' in keys_charts:
+        today_sounding = datetime.date.today().strftime('%Y%m%d')
+        for station, area_id_sounding in detail_comp[LOC_COMP]['sounding_dict'].items():
+            url = (f'https://kachelmannwetter.com/de/ajax/obsdetail?station_id=R{station}&timestamp={today_sounding}0000'
+                   f'&param_id=1&model=obsradio&area_id={area_id_sounding}&counter=true&lang=DE')
+            download_kachelmann(s, url, user_agent, 'sounding')
 
     # Download kachelmannwetter.com satellite images
-    for loc in detail_comp[LOC_COMP]['locations_sat']:
-        url = f'https://kachelmannwetter.com/de/sat/{loc}/satellit-satellit-hd-10m-superhd.html'
-        download_kachelmann(s, url, user_agent, type_data='sat', loc_in=loc, )
+    if 'locations_sat' in keys_charts:
+        for loc in detail_comp[LOC_COMP]['locations_sat']:
+            url = f'https://kachelmannwetter.com/de/sat/{loc}/satellit-satellit-hd-10m-superhd.html'
+            download_kachelmann(s, url, user_agent, type_data='sat', loc_in=loc, )
 
     # Download kachelmannwetter.com radar images
-    for loc in detail_comp[LOC_COMP]['locations_rad']:
-        url = f'https://kachelmannwetter.com/de/regenradar/{loc}'
-        download_kachelmann(s, url, user_agent, type_data='radar', loc_in=loc)
+    if 'locations_rad' in keys_charts:
+        for loc in detail_comp[LOC_COMP]['locations_rad']:
+            url = f'https://kachelmannwetter.com/de/regenradar/{loc}'
+            download_kachelmann(s, url, user_agent, type_data='radar', loc_in=loc)
 
     # Set variables that should be downloaded from topmeteo
     var_topmeteo = {'pfd': 28, 'thermik': 24, 'wolken': 26, 'wind_1500': 39}
