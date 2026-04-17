@@ -12,9 +12,24 @@ from urllib.parse import urlparse
 import time
 
 
-LOC_COMP = 'tabor_25'
+LOC_COMP = 'de'
+CREATE_PRESENTATION = False
 
-detail_comp = {'prievidza_25':
+detail_comp = {'de':
+                    {'sounding_dict': {'11952': '961', '12575': '961', '11747': '961', '12843': '961'},
+                     'locations_sat': ['mitteleuropa', 'deutschland'],
+                     'loc_topmeteo': 'de',
+                     'locations_rad': ['deutschland'],
+                     'model_info':
+                         {'model_list': ['deu-hd', 'euro', 'swisshd-nowcast'],
+                          'var_model_list':
+                              ['bewoelkungsgrad', 'bedeckungsgrad-low-clouds', 'bedeckungsgrad-mid-clouds'],
+                          'loc_model': 'slowakei', 'init_hour': '00',
+                          'today_model': datetime.date.today().strftime('%Y%m%d'),
+                          'hour_model_list': [str(i).zfill(2) for i in range(8, 18, 2)],
+                          }},
+
+                'prievidza_25':
                     {'sounding_dict': {'11952': '961', '12575': '961', '11747': '961', '12843': '961'},
                      'locations_sat': ['mitteleuropa', 'slowakei'],
                      'loc_topmeteo': 'cz',
@@ -70,21 +85,25 @@ def main():
 
     user_agent = {'User-agent': driver.execute_script("return navigator.userAgent")}
 
-    # Copy template to daily directory and clean-up if needed
-    today = datetime.date.today().strftime('%m%d')
-    os.chdir(f'briefings/{LOC_COMP}')
-    if not os.path.isdir(today):
-        shutil.copytree(f'template_{LOC_COMP}', today)
-        shutil.rmtree(f'{today}/charts')
-        os.mkdir(f'{today}/charts')
+    if CREATE_PRESENTATION:
+        # Copy template to daily directory and clean-up if needed
+        today = datetime.date.today().strftime('%m%d')
+        os.chdir(f'briefings/{LOC_COMP}')
+        if not os.path.isdir(today):
+            shutil.copytree(f'template_{LOC_COMP}', today)
+            shutil.rmtree(f'{today}/charts')
+            os.mkdir(f'{today}/charts')
 
-    # Rename presentation
-    os.chdir(f'{today}')
-    pres_template_string = f'template_{LOC_COMP}.odp'
-    pres_today_string = pres_template_string.replace('template', today)
-    if os.path.exists(pres_template_string):
-        os.rename(pres_template_string, pres_today_string)
-    os.chdir('charts')
+        # Rename presentation
+        os.chdir(f'{today}')
+        pres_template_string = f'template_{LOC_COMP}.odp'
+        pres_today_string = pres_template_string.replace('template', today)
+        if os.path.exists(pres_template_string):
+            os.rename(pres_template_string, pres_today_string)
+        os.chdir('charts')
+    else:
+        os.makedirs(f'briefings/{LOC_COMP}/charts', exist_ok=True)
+        os.chdir(f'briefings/{LOC_COMP}/charts')
 
     # Download DWD charts
     if not os.path.isdir('gwl'):
@@ -100,30 +119,32 @@ def main():
 
     keys_charts = detail_comp[LOC_COMP].keys()
 
-    if 'model_info' in keys_charts:
-        model_info = detail_comp[LOC_COMP]['model_info']
-        for model_use in model_info['model_list']:
-            for var_model in model_info['var_model_list']:
-                for hour_model in model_info['hour_model_list']:
-                    url = (f'https://kachelmannwetter.com/de/modellkarten/{model_use}/'
-                           f'{model_info["today_model"]}{model_info["init_hour"]}/{model_info["loc_model"]}/'
-                           f'{var_model}/{model_info["today_model"]}-{hour_model}00z.html')
-                    download_kachelmann(s, url, user_agent, type_data='model', loc_in=None,
-                                        model=model_use, model_var=var_model)
+    # # Download kachelmannwetter.com weather charts
+    # if 'model_info' in keys_charts:
+    #     model_info = detail_comp[LOC_COMP]['model_info']
+    #     for model_use in model_info['model_list']:
+    #         for var_model in model_info['var_model_list']:
+    #             for hour_model in model_info['hour_model_list']:
+    #                 url = (f'https://kachelmannwetter.com/de/modellkarten/{model_use}/'
+    #                        f'{model_info["today_model"]}{model_info["init_hour"]}/{model_info["loc_model"]}/'
+    #                        f'{var_model}/{model_info["today_model"]}-{hour_model}00z.html')
+    #                 download_kachelmann(s, url, user_agent, type_data='model', loc_in=None,
+    #                                     model=model_use, model_var=var_model)
 
-    # Download kachelmannwetter.com soundings images
-    if 'sounding_dict' in keys_charts:
-        today_sounding = datetime.date.today().strftime('%Y%m%d')
-        for station, area_id_sounding in detail_comp[LOC_COMP]['sounding_dict'].items():
-            url = (f'https://kachelmannwetter.com/de/ajax/obsdetail?station_id=R{station}&timestamp={today_sounding}0000'
-                   f'&param_id=1&model=obsradio&area_id={area_id_sounding}&counter=true&lang=DE')
-            download_kachelmann(s, url, user_agent, 'sounding')
+    # # Download kachelmannwetter.com soundings images
+    # if 'sounding_dict' in keys_charts:
+    #     today_sounding = datetime.date.today().strftime('%Y%m%d')
+    #     for station, area_id_sounding in detail_comp[LOC_COMP]['sounding_dict'].items():
+    #         url = (f'https://kachelmannwetter.com/de/ajax/obsdetail?station_id=R{station}&timestamp={today_sounding}0000'
+    #                f'&param_id=1&model=obsradio&area_id={area_id_sounding}&counter=true&lang=DE')
+    #         download_kachelmann(s, url, user_agent, 'sounding')
+    #
 
     # Download kachelmannwetter.com satellite images
     if 'locations_sat' in keys_charts:
         for loc in detail_comp[LOC_COMP]['locations_sat']:
             url = f'https://kachelmannwetter.com/de/sat/{loc}/satellit-satellit-hd-10m-superhd.html'
-            download_kachelmann(s, url, user_agent, type_data='sat', loc_in=loc, )
+            download_kachelmann(s, url, user_agent, type_data='sat', loc_in=loc)
 
     # Download kachelmannwetter.com radar images
     if 'locations_rad' in keys_charts:
@@ -144,15 +165,16 @@ def main():
     # Download wetter3
     request_download('https://wetter3.de/Animation_00_UTC/12_10.gif', user_agent, opath='gwl/')
 
-    # Verify if command-line LibreOffice is available
-    os.chdir('..')
-    if shutil.which('soffice'):
-        # Convert presentation to PDF
-        os.system(f'soffice --headless --convert-to pdf {pres_today_string}')
+    if CREATE_PRESENTATION:
+        # Verify if command-line LibreOffice is available
+        os.chdir('..')
+        if shutil.which('soffice'):
+            # Convert presentation to PDF
+            os.system(f'soffice --headless --convert-to pdf {pres_today_string}')
 
-    # Clean up
-    for key, item in driver_avail.items():
-        driver_avail[key].close()
+        # Clean up
+        for key, item in driver_avail.items():
+            driver_avail[key].close()
 
 
 # Initialize Chrome driver with specific options (https://github.com/SeleniumHQ/selenium/issues/13095 means
