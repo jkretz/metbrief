@@ -173,12 +173,22 @@ def main():
             os.system(f'soffice --headless --convert-to pdf {pres_today_string}')
 
 
+def is_raspberry_pi():
+    try:
+        with open('/proc/device-tree/model', 'r') as f:
+            model = f.read().lower()
+            return 'raspberry pi' in model
+    except FileNotFoundError:
+        return False
+
+
 # Initialize Chrome driver with specific options (https://github.com/SeleniumHQ/selenium/issues/13095 means
 # there is a bug in ChromeDriver that prevents it from running in detached mode)
 def initialize_chrome_driver():
     from selenium.webdriver.chrome.service import Service as ChromeService
     from webdriver_manager.chrome import ChromeDriverManager
     from selenium.webdriver.chrome.options import Options
+
     driver = None
 
     options_chrome = Options()
@@ -188,7 +198,18 @@ def initialize_chrome_driver():
     options_chrome.add_argument("--disable-gpu")
     options_chrome.add_argument("--remote-debugging-port=9222")
     options_chrome.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36")
-    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options_chrome)
+
+    if is_raspberry_pi():
+
+        chrome_bin = "/usr/bin/chromium-browser"
+        driver_path = "/usr/bin/chromedriver"
+
+        if os.path.exists(chrome_bin):
+            options_chrome.binary_location = chrome_bin
+        service = ChromeService(executable_path=driver_path)
+        driver = webdriver.Chrome(service=service, options=options_chrome)
+    else:
+        driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options_chrome)
 
     return driver
 
