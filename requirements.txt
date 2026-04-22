@@ -3,3 +3,5 @@
  beautifulsoup4
  webdriver-manager
  lxml
+ fake-useragent
+ curl-cffi

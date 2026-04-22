@@ -1,6 +1,5 @@
 import os
-import requests
-from requests.auth import HTTPBasicAuth
+from curl_cffi import requests
 import shutil
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -11,6 +10,8 @@ from user_details import *
 from urllib.parse import urlparse
 import time
 import argparse
+from fake_useragent import UserAgent
+
 
 LOC_COMP = 'de'
 
@@ -68,36 +69,14 @@ def main():
     output_path = args.output_path
 
     # Check for available browsers
-    browser_list = ['Firefox', 'Chrome']
-    driver_avail = {}
+    browser_list = ['Chrome']
+    driver = None
     for browser in browser_list:
         if browser == 'Chrome':
-            driver_avail[browser] = initialize_chrome_driver()
-        elif browser == 'Firefox':
-            driver_avail[browser] = initialize_firefox_driver()
+            driver = initialize_chrome_driver()
 
-    if len(driver_avail) == 0:
-        raise Exception(f'Installed browsers not in {browser_list}')
-
-    nd = 0
-    driver, cookies = None, None
-
-    for key, driver in driver_avail.items():
-        # Try to get cookies for session
-        driver.get('https://kachelmannwetter.com/')
-        cookies = driver.get_cookies()
-
-        if len(cookies) == 0:
-            print(f'Cookies not found for {key}')
-            nd += 1
-            if nd == len(driver_avail):
-                raise Exception(f'Cookie download failed for all drivers in: {list(driver_avail.keys())}')
-            continue  # Try the next driver
-        else:
-            print(f'Cookies successfully retrieved using driver: {key}')
-            break  # Exit loop if cookies are successfully retrieved
-
-    user_agent = {'User-agent': driver.execute_script("return navigator.userAgent")}
+    ua = UserAgent()
+    user_agent = {'User-agent': ua.random}
 
     if create_presentation_locally:
         # Copy template to daily directory and clean-up if needed
@@ -124,10 +103,9 @@ def main():
         os.makedirs(base_path, exist_ok=True)
         os.chdir(base_path)
 
-    # Set cookie that has previously been fetched
-    s = requests.Session()
-    for cookie in cookies:
-        s.cookies.set(cookie['name'], cookie['value'])
+    s = requests.Session(impersonate="chrome146")
+    s.get("https://kachelmannwetter.com")
+
 
     keys_charts = detail_comp[LOC_COMP].keys()
 
@@ -137,12 +115,14 @@ def main():
             for loc in detail_comp[LOC_COMP]['locations_sat']:
                 url = f'https://kachelmannwetter.com/de/sat/{loc}/satellit-satellit-hd-10m-superhd.html'
                 download_kachelmann(s, url, user_agent, type_data='sat', loc_in=loc)
+                # time.sleep(random.uniform(3, 7))
 
         # Download kachelmannwetter.com radar images
         if 'locations_rad' in keys_charts:
             for loc in detail_comp[LOC_COMP]['locations_rad']:
                 url = f'https://kachelmannwetter.com/de/regenradar/{loc}'
                 download_kachelmann(s, url, user_agent, type_data='radar', loc_in=loc)
+                # time.sleep(random.uniform(3, 7))
     else:
         # # Download kachelmannwetter.com weather charts
         # if 'model_info' in keys_charts:
@@ -192,10 +172,6 @@ def main():
             # Convert presentation to PDF
             os.system(f'soffice --headless --convert-to pdf {pres_today_string}')
 
-        # Clean up
-        for key, item in driver_avail.items():
-            driver_avail[key].close()
-
 
 # Initialize Chrome driver with specific options (https://github.com/SeleniumHQ/selenium/issues/13095 means
 # there is a bug in ChromeDriver that prevents it from running in detached mode)
@@ -204,25 +180,17 @@ def initialize_chrome_driver():
     from webdriver_manager.chrome import ChromeDriverManager
     from selenium.webdriver.chrome.options import Options
     driver = None
-    try:
-        options_chrome = Options()
-        options_chrome.add_argument("--headless")
-        driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options_chrome)
-    finally:
-        return driver
 
+    options_chrome = Options()
+    options_chrome.add_argument("--headless")
+    options_chrome.add_argument("--no-sandbox")
+    options_chrome.add_argument("--disable-dev-shm-usage")
+    options_chrome.add_argument("--disable-gpu")
+    options_chrome.add_argument("--remote-debugging-port=9222")
+    options_chrome.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36")
+    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options_chrome)
 
-def initialize_firefox_driver():
-    from selenium.webdriver.firefox.service import Service as FirefoxService
-    from webdriver_manager.firefox import GeckoDriverManager
-    from selenium.webdriver.firefox.options import Options
-    driver = None
-    try:
-        options = Options()
-        options.add_argument("--headless")
-        driver = webdriver.Firefox(service=FirefoxService(GeckoDriverManager().install()), options=options)
-    finally:
-        return driver
+    return driver
 
 
 def download_topmeteo(driver, var_dict, user_agent, loc='de', day=0, today=None, user=None, passwd=None):
@@ -305,7 +273,7 @@ def download_kachelmann(session, url_in, user_agent, type_data=None, loc_in=None
 
     try:
         # Fetch webpage content using the provided session
-        response = session.get(url_in, headers=user_agent)
+        response = session.get(url_in)#, headers=user_agent)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "lxml")
 
@@ -341,12 +309,11 @@ def download_kachelmann(session, url_in, user_agent, type_data=None, loc_in=None
 
         # Download image if it doesn't exist
         if not os.path.isfile(filename):
-            img_response = session.get(download_url, headers=user_agent, stream=True)
-            img_response.raise_for_status()  # Ensure we got a successful response
+            img_response = session.get(download_url)
+            img_response.raise_for_status()
 
             with open(filename, 'wb') as file:
-                for chunk in img_response.iter_content(8192):
-                    file.write(chunk)
+                file.write(img_response.content)
 
         # Create a symbolic link to the latest image
         link_filename = os.path.join(type_data, f"{type_data}_{loc_in}_latest.png")
@@ -402,7 +369,7 @@ def request_download(url_in, user_agent, opath='', user=None, passwd=None):
 
     # Start session and download file
     session = requests.Session()
-    auth = HTTPBasicAuth(user, passwd) if user and passwd else None
+    auth = None  # HTTPBasicAuth(user, passwd) if user and passwd else None
 
     try:
         response = session.get(url_in, headers=user_agent, auth=auth, stream=True)
