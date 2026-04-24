@@ -2,13 +2,10 @@ import os
 from curl_cffi import requests
 import shutil
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 import datetime
 from user_details import *
 from urllib.parse import urlparse
-import time
+import re
 import argparse
 from fake_useragent import UserAgent
 
@@ -16,7 +13,7 @@ from fake_useragent import UserAgent
 LOC_COMP = 'de'
 
 detail_comp = {'de':
-                    {'sounding_dict': {'11952': '961', '12575': '961', '11747': '961', '12843': '961'},
+                    {'sounding_dict': {'10739': '961', '10771': '961',  '10548': '961'},
                      'locations_sat': ['mitteleuropa', 'deutschland'],
                      'loc_topmeteo': 'de',
                      'locations_rad': ['deutschland'],
@@ -24,7 +21,7 @@ detail_comp = {'de':
                          {'model_list': ['deu-hd', 'euro', 'swisshd-nowcast'],
                           'var_model_list':
                               ['bewoelkungsgrad', 'bedeckungsgrad-low-clouds', 'bedeckungsgrad-mid-clouds'],
-                          'loc_model': 'slowakei', 'init_hour': '00',
+                          'loc_model': 'deutschland', 'init_hour': '00',
                           'today_model': datetime.date.today().strftime('%Y%m%d'),
                           'hour_model_list': [str(i).zfill(2) for i in range(8, 18, 2)],
                           }},
@@ -56,9 +53,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Metbrief script"
     )
-    parser.add_argument("--satrad_only", required=False, type=bool, default=False,
+    parser.add_argument("--satrad_only", required=False, action="store_true",
                         help="Set to True to only download satellite and radar charts")
-    parser.add_argument("--create_presentation_locally", required=False, type=bool, default=False,
+    parser.add_argument("--create_presentation_locally", required=False, action="store_true",
                         help="Set to True to create the presentation locally. PRESENTLY DISABLED")
     parser.add_argument("--output_path", required=False, type=str,
                         help="Set output path")
@@ -68,18 +65,12 @@ def main():
     create_presentation_locally = False  # args.create_presentation_locally
     output_path = args.output_path
 
-    # Check for available browsers
-    browser_list = ['Chrome']
-    driver = None
-    for browser in browser_list:
-        if browser == 'Chrome':
-            driver = initialize_chrome_driver()
-
     ua = UserAgent()
     user_agent = {'User-agent': ua.random}
 
+    pres_today_string = None
     if create_presentation_locally:
-        # Copy template to daily directory and clean-up if needed
+        # Copy template to daily directory and cleanup if needed
         today = datetime.date.today().strftime('%m%d')
         os.chdir(f'briefings/{LOC_COMP}')
         if not os.path.isdir(today):
@@ -106,7 +97,6 @@ def main():
     s = requests.Session(impersonate="chrome146")
     s.get("https://kachelmannwetter.com")
 
-
     keys_charts = detail_comp[LOC_COMP].keys()
 
     if satrad_only:
@@ -114,15 +104,13 @@ def main():
         if 'locations_sat' in keys_charts:
             for loc in detail_comp[LOC_COMP]['locations_sat']:
                 url = f'https://kachelmannwetter.com/de/sat/{loc}/satellit-satellit-hd-10m-superhd.html'
-                download_kachelmann(s, url, user_agent, type_data='sat', loc_in=loc)
-                # time.sleep(random.uniform(3, 7))
+                download_kachelmann(s, url, type_data='sat', loc_in=loc)
 
         # Download kachelmannwetter.com radar images
         if 'locations_rad' in keys_charts:
             for loc in detail_comp[LOC_COMP]['locations_rad']:
                 url = f'https://kachelmannwetter.com/de/regenradar/{loc}'
-                download_kachelmann(s, url, user_agent, type_data='radar', loc_in=loc)
-                # time.sleep(random.uniform(3, 7))
+                download_kachelmann(s, url, type_data='radar', loc_in=loc)
     else:
         # # Download kachelmannwetter.com weather charts
         # if 'model_info' in keys_charts:
@@ -133,17 +121,16 @@ def main():
         #                 url = (f'https://kachelmannwetter.com/de/modellkarten/{model_use}/'
         #                        f'{model_info["today_model"]}{model_info["init_hour"]}/{model_info["loc_model"]}/'
         #                        f'{var_model}/{model_info["today_model"]}-{hour_model}00z.html')
-        #                 download_kachelmann(s, url, user_agent, type_data='model', loc_in=None,
-        #                                     model=model_use, model_var=var_model)
+        #                 download_kachelmann(s, url, user_agent, type_data='model', loc_in=None, model_var=var_model)
 
-        # # Download kachelmannwetter.com soundings images
-        # if 'sounding_dict' in keys_charts:
-        #     today_sounding = datetime.date.today().strftime('%Y%m%d')
-        #     for station, area_id_sounding in detail_comp[LOC_COMP]['sounding_dict'].items():
-        #         url = (f'https://kachelmannwetter.com/de/ajax/obsdetail?station_id=R{station}&timestamp={today_sounding}0000'
-        #                f'&param_id=1&model=obsradio&area_id={area_id_sounding}&counter=true&lang=DE')
-        #         download_kachelmann(s, url, user_agent, 'sounding')
-        #
+        # Download kachelmannwetter.com soundings images
+        if 'sounding_dict' in keys_charts:
+            today_sounding = datetime.date.today().strftime('%Y%m%d')
+            for station, area_id_sounding in detail_comp[LOC_COMP]['sounding_dict'].items():
+                url = (f'https://kachelmannwetter.com/de/ajax/obsdetail?station_id=R{station}'
+                       f'&timestamp={today_sounding}0000&param_id=1&model=obsradio'
+                       f'&area_id={area_id_sounding}&counter=true&lang=DE')
+                download_kachelmann(s, url, 'sounding')
 
         # Download DWD charts
         if not os.path.isdir('gwl'):
@@ -159,7 +146,7 @@ def main():
         today = today.replace(hour=0, minute=0, second=0, microsecond=0)
 
         # Topmeteo chart download
-        download_topmeteo(driver, var_topmeteo, user_agent, loc=detail_comp[LOC_COMP]['loc_topmeteo'],
+        download_topmeteo(var_topmeteo, loc=detail_comp[LOC_COMP]['loc_topmeteo'],
                           day=0, today=today, user=USERNAME_TOPMETEO, passwd=PASSWORD_TOPMETEO)
 
         # Download wetter3
@@ -173,102 +160,66 @@ def main():
             os.system(f'soffice --headless --convert-to pdf {pres_today_string}')
 
 
-def is_raspberry_pi():
-    try:
-        with open('/proc/device-tree/model', 'r') as f:
-            model = f.read().lower()
-            return 'raspberry pi' in model
-    except FileNotFoundError:
-        return False
-
-
-# Initialize Chrome driver with specific options (https://github.com/SeleniumHQ/selenium/issues/13095 means
-# there is a bug in ChromeDriver that prevents it from running in detached mode)
-def initialize_chrome_driver():
-    from selenium.webdriver.chrome.service import Service as ChromeService
-    from webdriver_manager.chrome import ChromeDriverManager
-    from selenium.webdriver.chrome.options import Options
-
-    driver = None
-
-    options_chrome = Options()
-    options_chrome.add_argument("--headless")
-    options_chrome.add_argument("--no-sandbox")
-    options_chrome.add_argument("--disable-dev-shm-usage")
-    options_chrome.add_argument("--disable-gpu")
-    options_chrome.add_argument("--remote-debugging-port=9222")
-    options_chrome.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36")
-
-    if is_raspberry_pi():
-
-        chrome_bin = "/usr/bin/chromium-browser"
-        driver_path = "/usr/bin/chromedriver"
-
-        if os.path.exists(chrome_bin):
-            options_chrome.binary_location = chrome_bin
-        service = ChromeService(executable_path=driver_path)
-        driver = webdriver.Chrome(service=service, options=options_chrome)
-    else:
-        driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options_chrome)
-
-    return driver
-
-
-def download_topmeteo(driver, var_dict, user_agent, loc='de', day=0, today=None, user=None, passwd=None):
-    """
-    Downloads weather charts from TopMeteo by automating login and fetching images.
-
-    Parameters:
-    - var_dict (dict): Dictionary of variables to download (e.g., {"pfd": "param1", "clouds": "param2"}).
-    - loc (str, optional): Location code (default: 'de').
-    - day (int, optional): Forecast day (0 = today, 1 = tomorrow, etc.).
-    - today (datetime, optional): Reference datetime object for time calculation.
-    - user (str, optional): Username for authentication (default: None).
-    - passwd (str, optional): Password for authentication (default: None).
-
-    Notes:
-    - Creates a 'topmeteo' directory if it doesn't exist.
-    - Logs in using Selenium and saves cookies for authentication.
-    - Downloads images for specified weather parameters.
-    """
+def download_topmeteo(var_dict, loc=None, day=0, today=None, user=None, passwd=None):
 
     # Create topmeteo directory in charts
     if not os.path.isdir('topmeteo'):
         os.mkdir('topmeteo')
 
-    # Login
-    driver.get('https://vfr.topmeteo.eu/de/')
-    driver.find_element(By.NAME, "username").send_keys(user)
-    driver.find_element(By.NAME, "password").send_keys(passwd)
-    driver.find_element(By.NAME, "password").send_keys(Keys.ENTER)
-    time.sleep(3)
+    # 1. Start a persistent session and set referer
+    session = requests.Session(impersonate='chrome146')
+    session.headers.update({
+        'Referer': 'https://vfr.topmeteo.eu/de/de/login/'
+    })
 
-    for key, var in var_dict.items():
-        if key == 'pfd':
-            time_steps = [0]
-        else:
-            time_steps = range(8, 17)
+    # 2. Get the initial cookies and HTML to find the CSRF token
+    login_url = "https://vfr.topmeteo.eu/de/de/login/?next="
+    response = session.get(login_url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    csrf_token = soup.find('input', {'name': 'csrfmiddlewaretoken'})['value']
 
-        var_path = f'topmeteo/{key}'
-        if not os.path.isdir(var_path):
-            os.mkdir(var_path)
+    # 3. Build the payload
+    # Use the same keys identified in the browser's "Payload" tab
+    payload = {
+        'csrfmiddlewaretoken': csrf_token,
+        'username': user,
+        'password': passwd,
+        'next': ''
+    }
 
-        for time_data in time_steps:
-            filename = f'{key}_{day}_{time_data}.png'
-            if os.path.isfile(f'{var_path}/{filename}'):
-                continue
+    # 4. Perform the POST and check for correct login
+    post_response = session.post(login_url, data=payload)
+    soup = BeautifulSoup(post_response.text, 'html.parser')
+    logout_element = soup.find(string=re.compile("Ausloggen", re.IGNORECASE))
+
+    # 5. Verify and Download
+    if post_response.status_code == 200 and logout_element:
+        print("TopMeteo login successful!")
+
+        for key, var in var_dict.items():
+            if key == 'pfd':
+                time_steps = [0]
             else:
-                time_step = today.replace(hour=time_data).strftime("%Y-%m-%dT%H:%M:%SZ")
-                download_url = f'https://vfr.topmeteo.eu/de/{loc}/map/{var}/{day}/{time_data}/image?{time_step}'
-                driver.get(download_url)
-                cookies = driver.get_cookies()
-                s = requests.Session()
-                for cookie in cookies:
-                    s.cookies.set(cookie['name'], cookie['value'])
-                open(f'{var_path}/{filename}', 'wb').write((s.get(download_url, headers=user_agent)).content)
+                time_steps = range(8, 17)
+
+            var_path = f'topmeteo/{key}'
+            if not os.path.isdir(var_path):
+                os.mkdir(var_path)
+
+            for time_data in time_steps:
+                filename = f'{key}_{day}_{time_data}.png'
+                if os.path.isfile(f'{var_path}/{filename}'):
+                    continue
+                else:
+                    time_step = today.replace(hour=12).strftime("%Y-%m-%dT%H:%M:%SZ")
+                    download_url = f'https://vfr.topmeteo.eu/de/{loc}/map/{var}/{day}/{time_data}/image?{time_step}'
+                    session_download_url = requests.get(download_url, cookies=post_response.cookies)
+                    open(f'{var_path}/{filename}', 'wb').write(session_download_url.content)
+    else:
+        print("TopMeteo login unsuccessful!")
 
 
-def download_kachelmann(session, url_in, user_agent, type_data=None, loc_in=None, model=None, model_var=None):
+def download_kachelmann(session, url_in, type_data=None, loc_in=None, model=None, model_var=None):
     """
     Downloads the latest satellite, radar, model, or sounding images from Kachelmannwetter.
 
@@ -294,7 +245,7 @@ def download_kachelmann(session, url_in, user_agent, type_data=None, loc_in=None
 
     try:
         # Fetch webpage content using the provided session
-        response = session.get(url_in)#, headers=user_agent)
+        response = session.get(url_in)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "lxml")
 
@@ -352,7 +303,7 @@ def download_kachelmann(session, url_in, user_agent, type_data=None, loc_in=None
         return None
 
 
-def request_download(url_in, user_agent, opath='', user=None, passwd=None):
+def request_download(url_in, user_agent, opath=''):
     """
     Downloads a file using Python's requests module with optional authentication.
 
@@ -390,10 +341,8 @@ def request_download(url_in, user_agent, opath='', user=None, passwd=None):
 
     # Start session and download file
     session = requests.Session()
-    auth = None  # HTTPBasicAuth(user, passwd) if user and passwd else None
-
     try:
-        response = session.get(url_in, headers=user_agent, auth=auth, stream=True)
+        response = session.get(url_in, headers=user_agent, stream=True)
         response.raise_for_status()  # Raise an error for HTTP issues
 
         # Write content to file
