@@ -123,21 +123,21 @@ def main():
         #                        f'{var_model}/{model_info["today_model"]}-{hour_model}00z.html')
         #                 download_kachelmann(s, url, user_agent, type_data='model', loc_in=None, model_var=var_model)
 
-        # Download kachelmannwetter.com soundings images
-        if 'sounding_dict' in keys_charts:
-            today_sounding = datetime.date.today().strftime('%Y%m%d')
-            for station, area_id_sounding in detail_comp[LOC_COMP]['sounding_dict'].items():
-                url = (f'https://kachelmannwetter.com/de/ajax/obsdetail?station_id=R{station}'
-                       f'&timestamp={today_sounding}0000&param_id=1&model=obsradio'
-                       f'&area_id={area_id_sounding}&counter=true&lang=DE')
-                download_kachelmann(s, url, 'sounding')
-
-        # Download DWD charts
-        if not os.path.isdir('gwl'):
-            os.mkdir('gwl')
-        for chart in ['bwk_bodendruck_na_ana', 'ico_500ht_na_ana']:
-            file_url = f'https://www.dwd.de/DWD/wetter/wv_spez/hobbymet/wetterkarten/{chart}.png'
-            request_download(file_url, user_agent, opath='gwl/')
+        # # Download kachelmannwetter.com soundings images
+        # if 'sounding_dict' in keys_charts:
+        #     today_sounding = datetime.date.today().strftime('%Y%m%d')
+        #     for station, area_id_sounding in detail_comp[LOC_COMP]['sounding_dict'].items():
+        #         url = (f'https://kachelmannwetter.com/de/ajax/obsdetail?station_id=R{station}'
+        #                f'&timestamp={today_sounding}0000&param_id=1&model=obsradio'
+        #                f'&area_id={area_id_sounding}&counter=true&lang=DE')
+        #         download_kachelmann(s, url, 'sounding')
+        #
+        # # Download DWD charts
+        # if not os.path.isdir('gwl'):
+        #     os.mkdir('gwl')
+        # for chart in ['bwk_bodendruck_na_ana', 'ico_500ht_na_ana']:
+        #     file_url = f'https://www.dwd.de/DWD/wetter/wv_spez/hobbymet/wetterkarten/{chart}.png'
+        #     request_download(file_url, user_agent, opath='gwl/')
 
         # Set variables that should be downloaded from topmeteo
         var_topmeteo = {'pfd': 28, 'thermik': 24, 'wolken': 26, 'wind_1500': 39}
@@ -149,8 +149,8 @@ def main():
         download_topmeteo(var_topmeteo, loc=detail_comp[LOC_COMP]['loc_topmeteo'],
                           day=0, today=today, user=USERNAME_TOPMETEO, passwd=PASSWORD_TOPMETEO)
 
-        # Download wetter3
-        request_download('https://wetter3.de/Animation_00_UTC/12_10.gif', user_agent, opath='gwl/')
+        # # Download wetter3
+        # request_download('https://wetter3.de/Animation_00_UTC/12_10.gif', user_agent, opath='gwl/')
 
     if create_presentation_locally:
         # Verify if command-line LibreOffice is available
@@ -208,13 +208,10 @@ def download_topmeteo(var_dict, loc=None, day=0, today=None, user=None, passwd=N
 
             for time_data in time_steps:
                 filename = f'{key}_{day}_{time_data}.png'
-                if os.path.isfile(f'{var_path}/{filename}'):
-                    continue
-                else:
-                    time_step = today.replace(hour=12).strftime("%Y-%m-%dT%H:%M:%SZ")
-                    download_url = f'https://vfr.topmeteo.eu/de/{loc}/map/{var}/{day}/{time_data}/image?{time_step}'
-                    session_download_url = requests.get(download_url, cookies=post_response.cookies)
-                    open(f'{var_path}/{filename}', 'wb').write(session_download_url.content)
+                time_step = today.replace(hour=12).strftime("%Y-%m-%dT%H:%M:%SZ")
+                download_url = f'https://vfr.topmeteo.eu/de/{loc}/map/{var}/{day}/{time_data}/image?{time_step}'
+                session_download_url = requests.get(download_url, cookies=post_response.cookies)
+                open(f'{var_path}/{filename}', 'wb').write(session_download_url.content)
     else:
         print("TopMeteo login unsuccessful!")
 
@@ -334,10 +331,6 @@ def request_download(url_in, user_agent, opath=''):
         os.makedirs(opath)
 
     file_path = os.path.join(opath, filename)
-
-    # Check if file already exists
-    if os.path.isfile(file_path):
-        return file_path
 
     # Start session and download file
     session = requests.Session()
