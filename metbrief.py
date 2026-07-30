@@ -126,7 +126,6 @@ def main():
                         url = (f'https://kachelmannwetter.com/de/modellkarten/{model_use}/'
                                f'{model_info["today_model"]}{model_info["init_hour"]}/{model_info["loc_model"]}/'
                                f'{var_model}/{model_info["today_model"]}-{hour_model}00z.html')
-                        print(hour_model)
                         download_kachelmann(s, url, 'model', loc_in=None, model_var=var_model)
 
         # Download kachelmannwetter.com soundings images
@@ -162,7 +161,6 @@ def main():
         download_topmeteo(var_topmeteo, loc=detail_comp[LOC_COMP]['loc_topmeteo'],
                           day=0, today=today, user=USERNAME_TOPMETEO, passwd=PASSWORD_TOPMETEO)
 
-
     if create_presentation_locally:
         # Verify if command-line LibreOffice is available
         os.chdir('..')
@@ -173,7 +171,7 @@ def main():
 
 def download_topmeteo(var_dict, loc=None, day=0, today=None, user=None, passwd=None):
 
-    # Create topmeteo directory in charts
+    # Create topmeteo directory in carts
     if not os.path.isdir('topmeteo'):
         os.mkdir('topmeteo')
     else:
@@ -256,10 +254,6 @@ def download_kachelmann(session, url_in, type_data=None, loc_in=None, model=None
 
     if not os.path.isdir(opath):
         os.makedirs(opath, exist_ok=True)
-    else:
-        if n_loc == 0:
-            shutil.rmtree(opath)
-            os.makedirs(opath, exist_ok=True)
 
     try:
         # Fetch webpage content using the provided session
@@ -297,8 +291,11 @@ def download_kachelmann(session, url_in, type_data=None, loc_in=None, model=None
             filename_split = os.path.basename(download_url).split('_')
             filename = os.path.join(opath, '_'.join(filename_split[:-2]) + '.png')
 
-        print(filename)
-            
+        # Download image if it doesn't exist
+        if os.path.isfile(filename):
+            print(filename)
+            os.remove(filename)
+
         # Download image if it doesn't exist
         if not os.path.isfile(filename):
             img_response = session.get(download_url)
