@@ -3,27 +3,32 @@ from curl_cffi import requests
 import shutil
 from bs4 import BeautifulSoup
 import datetime
-from user_details import *
+from user_details_jan import *
 from urllib.parse import urlparse
 import re
 import argparse
 from fake_useragent import UserAgent
 
 
-LOC_COMP = 'de'
+LOC_COMP = 'jwgc2026'
 
-detail_comp = {'de':
+detail_comp = {'wgc2026':
+                    {'sounding_dict': {'12425': '961', '12575': '961',  '12374': '961'},
+                     'locations_sat': ['mitteleuropa', 'polen'],
+                     'loc_topmeteo': 'pl',
+                     'locations_rad': ['polen']},
+               'jwgc2026':
                     {'sounding_dict': {'10739': '961', '10771': '961',  '10548': '961'},
                      'locations_sat': ['mitteleuropa', 'deutschland'],
                      'loc_topmeteo': 'de',
                      'locations_rad': ['deutschland'],
                      'model_info':
-                         {'model_list': ['deu-hd', 'euro', 'swisshd-nowcast'],
+                         {'model_list': ['sui-hd'],
                           'var_model_list':
                               ['bewoelkungsgrad', 'bedeckungsgrad-low-clouds', 'bedeckungsgrad-mid-clouds'],
                           'loc_model': 'deutschland', 'init_hour': '00',
                           'today_model': datetime.date.today().strftime('%Y%m%d'),
-                          'hour_model_list': [str(i).zfill(2) for i in range(8, 18, 2)],
+                          'hour_model_list': [str(i).zfill(2) for i in range(10, 16, 2)],
                           }},
 
                 'prievidza_25':
@@ -102,55 +107,61 @@ def main():
     if satrad_only:
         # Download kachelmannwetter.com satellite images
         if 'locations_sat' in keys_charts:
-            for loc in detail_comp[LOC_COMP]['locations_sat']:
+            for nl, loc in enumerate(detail_comp[LOC_COMP]['locations_sat']):
                 url = f'https://kachelmannwetter.com/de/sat/{loc}/satellit-satellit-hd-10m-superhd.html'
-                download_kachelmann(s, url, type_data='sat', loc_in=loc)
+                download_kachelmann(s, url, type_data='sat', loc_in=loc, n_loc=nl)
 
         # Download kachelmannwetter.com radar images
         if 'locations_rad' in keys_charts:
-            for loc in detail_comp[LOC_COMP]['locations_rad']:
+            for nl, loc in enumerate(detail_comp[LOC_COMP]['locations_rad']):
                 url = f'https://kachelmannwetter.com/de/regenradar/{loc}'
-                download_kachelmann(s, url, type_data='radar', loc_in=loc)
+                download_kachelmann(s, url, type_data='radar', loc_in=loc, n_loc=nl)
     else:
-        # # Download kachelmannwetter.com weather charts
-        # if 'model_info' in keys_charts:
-        #     model_info = detail_comp[LOC_COMP]['model_info']
-        #     for model_use in model_info['model_list']:
-        #         for var_model in model_info['var_model_list']:
-        #             for hour_model in model_info['hour_model_list']:
-        #                 url = (f'https://kachelmannwetter.com/de/modellkarten/{model_use}/'
-        #                        f'{model_info["today_model"]}{model_info["init_hour"]}/{model_info["loc_model"]}/'
-        #                        f'{var_model}/{model_info["today_model"]}-{hour_model}00z.html')
-        #                 download_kachelmann(s, url, user_agent, type_data='model', loc_in=None, model_var=var_model)
+        # Download kachelmannwetter.com weather charts
+        if 'model_info' in keys_charts:
+            model_info = detail_comp[LOC_COMP]['model_info']
+            for model_use in model_info['model_list']:
+                for var_model in model_info['var_model_list']:
+                    for hour_model in model_info['hour_model_list']:
+                        url = (f'https://kachelmannwetter.com/de/modellkarten/{model_use}/'
+                               f'{model_info["today_model"]}{model_info["init_hour"]}/{model_info["loc_model"]}/'
+                               f'{var_model}/{model_info["today_model"]}-{hour_model}00z.html')
+                        print(hour_model)
+                        download_kachelmann(s, url, 'model', loc_in=None, model_var=var_model)
 
         # Download kachelmannwetter.com soundings images
         if 'sounding_dict' in keys_charts:
             today_sounding = datetime.date.today().strftime('%Y%m%d')
+            nl = 0
             for station, area_id_sounding in detail_comp[LOC_COMP]['sounding_dict'].items():
                 url = (f'https://kachelmannwetter.com/de/ajax/obsdetail?station_id=R{station}'
                        f'&timestamp={today_sounding}0000&param_id=1&model=obsradio'
                        f'&area_id={area_id_sounding}&counter=true&lang=DE')
-                download_kachelmann(s, url, 'sounding')
-
-        # Download DWD charts
+                download_kachelmann(s, url, 'sounding', n_loc=nl)
+                nl += 1
+                
+        # Download DWD and wetter3 charts
         if not os.path.isdir('gwl'):
             os.mkdir('gwl')
+        else:
+            shutil.rmtree('gwl')
+            os.mkdir('gwl')
+
         for chart in ['bwk_bodendruck_na_ana', 'ico_500ht_na_ana']:
             file_url = f'https://www.dwd.de/DWD/wetter/wv_spez/hobbymet/wetterkarten/{chart}.png'
             request_download(file_url, user_agent, opath='gwl/')
+        request_download('https://wetter3.de/Animation_00_UTC/12_10.gif', user_agent, opath='gwl/')
 
+            
         # Set variables that should be downloaded from topmeteo
         var_topmeteo = {'pfd': 28, 'thermik': 24, 'wolken': 26, 'wind_1500': 39}
         # Set date
         today = datetime.datetime.now()
         today = today.replace(hour=0, minute=0, second=0, microsecond=0)
-
         # Topmeteo chart download
         download_topmeteo(var_topmeteo, loc=detail_comp[LOC_COMP]['loc_topmeteo'],
                           day=0, today=today, user=USERNAME_TOPMETEO, passwd=PASSWORD_TOPMETEO)
 
-        # Download wetter3
-        request_download('https://wetter3.de/Animation_00_UTC/12_10.gif', user_agent, opath='gwl/')
 
     if create_presentation_locally:
         # Verify if command-line LibreOffice is available
@@ -165,7 +176,11 @@ def download_topmeteo(var_dict, loc=None, day=0, today=None, user=None, passwd=N
     # Create topmeteo directory in charts
     if not os.path.isdir('topmeteo'):
         os.mkdir('topmeteo')
+    else:
+        shutil.rmtree('topmeteo')
+        os.mkdir('topmeteo')
 
+        
     # 1. Start a persistent session and set referer
     session = requests.Session(impersonate='chrome146')
     session.headers.update({
@@ -216,7 +231,7 @@ def download_topmeteo(var_dict, loc=None, day=0, today=None, user=None, passwd=N
         print("TopMeteo login unsuccessful!")
 
 
-def download_kachelmann(session, url_in, type_data=None, loc_in=None, model=None, model_var=None):
+def download_kachelmann(session, url_in, type_data=None, loc_in=None, model=None, model_var=None, n_loc=0):
     """
     Downloads the latest satellite, radar, model, or sounding images from Kachelmannwetter.
 
@@ -238,7 +253,13 @@ def download_kachelmann(session, url_in, type_data=None, loc_in=None, model=None
         opath = os.path.join(type_data, model, model_var)
     else:
         opath = type_data
-    os.makedirs(opath, exist_ok=True)
+
+    if not os.path.isdir(opath):
+        os.makedirs(opath, exist_ok=True)
+    else:
+        if n_loc == 0:
+            shutil.rmtree(opath)
+            os.makedirs(opath, exist_ok=True)
 
     try:
         # Fetch webpage content using the provided session
@@ -276,6 +297,8 @@ def download_kachelmann(session, url_in, type_data=None, loc_in=None, model=None
             filename_split = os.path.basename(download_url).split('_')
             filename = os.path.join(opath, '_'.join(filename_split[:-2]) + '.png')
 
+        print(filename)
+            
         # Download image if it doesn't exist
         if not os.path.isfile(filename):
             img_response = session.get(download_url)
